@@ -1,0 +1,250 @@
+:host {
+  display: block;
+  height: 100%;
+  background: #0a0a0a;
+  color: #e0e0e0;
+  font-family: 'Courier New', monospace;
+}
+
+.log-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #333;
+
+  h1 { margin: 0; font-size: 18px; color: #fff; }
+
+  .search-btn {
+    color: #7cb8ff;
+    text-decoration: none;
+    font-size: 14px;
+    &:hover { color: #fff; }
+  }
+}
+
+.recorder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 20px;
+  border-bottom: 1px solid #222;
+
+  .status { font-size: 14px; color: #888; }
+
+  .record-btn {
+    padding: 14px 40px;
+    border: 2px solid #555;
+    border-radius: 50px;
+    background: transparent;
+    color: #e0e0e0;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+
+    &:hover { border-color: #999; }
+
+    &.recording {
+      border-color: #ff4444;
+      color: #ff4444;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+  }
+
+  .chunk-count { font-size: 12px; color: #666; }
+}
+
+.events-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.event-card {
+  background: #111;
+  border: 1px solid #2a2a2a;
+  border-left: 3px solid #7cb8ff;
+  border-radius: 4px;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: background 0.15s;
+
+  &:hover { background: #161616; }
+  &.active { border-left-color: #ffcc44; background: #1a1800; }
+
+  .timestamp {
+    font-size: 11px;
+    color: #666;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+
+  .play-icon {
+    font-size: 10px;
+    color: #7cb8ff;
+    opacity: 0.7;
+  }
+
+  .content {
+    margin: 0;
+    line-height: 1.6;
+    font-size: 14px;
+  }
+
+  .tags {
+    margin-top: 8px;
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .tag {
+    font-size: 11px;
+    color: #7cb8ff;
+    background: #1a2a3a;
+    padding: 2px 8px;
+    border-radius: 10px;
+  }
+}
+
+.controls-row {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+
+  &.disabled { opacity: 0.4; pointer-events: none; }
+}
+
+.toggle-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  .toggle-label {
+    font-size: 12px;
+    color: #666;
+  }
+}
+
+.toggle {
+  display: flex;
+  gap: 3px;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 20px;
+  padding: 3px;
+
+  button {
+    padding: 4px 12px;
+    border: none;
+    border-radius: 16px;
+    background: transparent;
+    color: #666;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+
+    &.active {
+      background: #7cb8ff;
+      color: #000;
+      font-weight: bold;
+    }
+    &:hover:not(.active) { color: #aaa; }
+  }
+}
+
+.timer {
+  font-size: 20px;
+  font-weight: bold;
+  color: #ff4444;
+  letter-spacing: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.event-card.transcribing {
+  border-left-color: #888;
+  opacity: 0.7;
+}
+
+.dot-animation::after {
+  content: '';
+  animation: dots 1.2s steps(3, end) infinite;
+}
+
+.empty {
+  text-align: center;
+  color: #555;
+  margin-top: 60px;
+  font-size: 14px;
+  line-height: 2;
+}
+
+.mini-player {
+  position: sticky;
+  bottom: 0;
+  background: #1a1a2e;
+  border-top: 1px solid #333;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+
+  .mini-player-content {
+    font-size: 13px;
+    color: #ccc;
+    flex: 1;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .mini-player-controls {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .ctrl-btn {
+    background: transparent;
+    border: 1px solid #444;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    color: #ccc;
+    cursor: pointer;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    &:hover { border-color: #7cb8ff; color: #7cb8ff; }
+  }
+
+  .close-btn { border-color: #333; color: #666; }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes dots {
+  0%   { content: ''; }
+  33%  { content: '.'; }
+  66%  { content: '..'; }
+  100% { content: '...'; }
+}
