@@ -4,9 +4,18 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  const corsOrigin = process.env.CORS_ORIGIN ?? 'http://localhost:4301';
+  const rawOrigin = process.env.CORS_ORIGIN ?? 'http://localhost:4301';
+  // 支援多個來源（逗號分隔）
+  const allowedOrigins = rawOrigin.split(',').map((o) => o.trim());
   app.enableCors({
-    origin: corsOrigin,
+    origin: (origin, callback) => {
+      // 無 origin（如 curl/Postman）或符合白名單，才放行
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, origin ?? '*');
+      } else {
+        callback(new Error(`CORS: origin ${origin} not allowed`));
+      }
+    },
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: true,
   });
