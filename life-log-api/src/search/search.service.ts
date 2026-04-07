@@ -78,8 +78,10 @@ export class SearchService {
     const sources = combined;
 
     // 4. 組成 RAG context，送給 Gemini
+    // 明確指定 Asia/Taipei，避免 Railway 伺服器（UTC）造成 +8 小時偏差
     const formatTs = (ms: number) =>
       new Date(ms).toLocaleString('zh-TW', {
+        timeZone: 'Asia/Taipei',
         year: 'numeric', month: '2-digit', day: '2-digit',
         hour: '2-digit', minute: '2-digit',
       });
@@ -94,6 +96,7 @@ export class SearchService {
       .join('\n');
 
     const todayStr = now.toLocaleDateString('zh-TW', {
+      timeZone: 'Asia/Taipei',
       year: 'numeric', month: '2-digit', day: '2-digit',
     });
 
