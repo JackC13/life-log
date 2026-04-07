@@ -53,23 +53,27 @@ export class SearchService {
       `Vector search returned ${vectorSources.length} matches for: "${question}"`,
     );
 
-    // 3. 同時撈今天的所有錄音（向量搜尋可能漏掉時間性問題如「今天有沒有錄音」）
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const { data: todayEvents } = await this.supabase.db
+    // 3. 撈最近 14 天的所有錄音作為時間軸背景
+    //    不做關鍵字偵測，讓 Gemini 自行根據日期判斷「今天」「昨天」「前天」等相對時間
+    const now = new Date();
+    const recentStart = new Date(now);
+    recentStart.setDate(recentStart.getDate() - 14);
+    recentStart.setHours(0, 0, 0, 0);
+
+    const { data: recentEvents } = await this.supabase.db
       .from('events')
       .select('id, content, start_time, audio_url')
       .eq('track_id', resolvedTrackId)
-      .gte('start_time', todayStart.getTime())
+      .gte('start_time', recentStart.getTime())
       .order('start_time', { ascending: true })
-      .limit(30);
+      .limit(60);
 
-    // 合併：向量結果優先，今天的事件補充
-    const todaySources = (todayEvents ?? []) as SearchResult[];
+    // 合併：向量結果優先，近期事件補充（去重）
+    const recentSources = (recentEvents ?? []) as SearchResult[];
     const allIds = new Set(vectorSources.map((s) => s.id));
     const combined = [
       ...vectorSources,
-      ...todaySources.filter((s) => !allIds.has(s.id)),
+      ...recentSources.filter((s) => !allIds.has(s.id)),
     ];
     const sources = combined;
 
@@ -84,22 +88,28 @@ export class SearchService {
       .map((s) => `[${formatTs(s.start_time)}] ${s.content}`)
       .join('\n');
 
-    const todayContext = todaySources
+    // 近期記錄依日期分組，方便 Gemini 理解時間結構
+    const recentContext = recentSources
       .map((s) => `[${formatTs(s.start_time)}] ${s.content}`)
       .join('\n');
+
+    const todayStr = now.toLocaleDateString('zh-TW', {
+      year: 'numeric', month: '2-digit', day: '2-digit',
+    });
 
     const model = this.gemini.getGenerativeModel({
       model: this.config.get('GEMINI_MODEL', 'gemini-2.5-flash'),
     });
-    const prompt = `你是使用者的個人記憶助理。
+    const prompt = `你是使用者的個人記憶助理。今天日期是 ${todayStr}。
 
-【今天所有的錄音記錄】（共 ${todaySources.length} 筆）：
-${todayContext || '（今天尚無錄音記錄）'}
+【最近 14 天的錄音記錄】（共 ${recentSources.length} 筆，依時間排序）：
+${recentContext || '（近期尚無錄音記錄）'}
 
-【與問題最相關的片段】：
+【語意搜尋最相關的片段】：
 ${vectorContext || '（無相關片段）'}
 
 根據上述內容，請用繁體中文回答：「${question}」
+回答時請注意日期，「今天」是 ${todayStr}，請依此推算昨天、前天等相對日期。
 如果找不到相關記錄，請明確說明。`;
 
     const result = await model.generateContent(prompt);
