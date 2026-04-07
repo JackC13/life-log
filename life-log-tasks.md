@@ -127,14 +127,16 @@ CREATE INDEX ON events USING ivfflat (embedding vector_cosine_ops) WITH (lists =
 CREATE OR REPLACE FUNCTION match_events(
   query_embedding vector(1536),
   match_threshold float,
-  match_count int
+  match_count int,
+  filter_track_id uuid DEFAULT NULL
 )
-RETURNS TABLE(id uuid, content text, start_time bigint, similarity float)
+RETURNS TABLE(id uuid, content text, start_time bigint, audio_url text, similarity float)
 LANGUAGE sql STABLE AS $$
-  SELECT id, content, start_time,
+  SELECT id, content, start_time, audio_url,
     1 - (embedding <=> query_embedding) AS similarity
   FROM events
   WHERE 1 - (embedding <=> query_embedding) > match_threshold
+    AND (filter_track_id IS NULL OR track_id = filter_track_id)
   ORDER BY embedding <=> query_embedding
   LIMIT match_count;
 $$;

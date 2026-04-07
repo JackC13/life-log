@@ -20,5 +20,6 @@ export interface SearchResult {
   id: string;
   content: string;
   start_time: number;
-  similarity: number;
+  audio_url?: string;
+  similarity?: number;
 }

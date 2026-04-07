@@ -27,6 +27,7 @@ export class AudioCaptureService {
   private mediaRecorder?: MediaRecorder;
   private stream?: MediaStream;
   private collectedChunks: Blob[] = [];   // 當前 chunk 累積
+  private pendingUploads = 0;             // 並發上傳計數，避免 race condition
   private trackId = 'personal-life';
   private sessionStartTime = 0;
   private chunkStartTime = 0;             // 當前 chunk 的起始時間
@@ -125,6 +126,7 @@ export class AudioCaptureService {
   }
 
   private async uploadAndTranscribe(blob: Blob, startTime: number): Promise<void> {
+    this.pendingUploads++;
     this.isUploading.set(true);
     const form = new FormData();
     const ext = this.mimeType.includes('mp4') || this.mimeType.includes('aac') ? 'mp4' : 'webm';
@@ -140,7 +142,8 @@ export class AudioCaptureService {
     } catch (err) {
       console.error('Upload failed:', err);
     } finally {
-      this.isUploading.set(false);
+      this.pendingUploads--;
+      if (this.pendingUploads === 0) this.isUploading.set(false);
     }
   }
 }

@@ -74,12 +74,18 @@ export class SearchService {
     const sources = combined;
 
     // 4. 組成 RAG context，送給 Gemini
+    const formatTs = (ms: number) =>
+      new Date(ms).toLocaleString('zh-TW', {
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit',
+      });
+
     const vectorContext = vectorSources
-      .map((s) => `[${new Date(s.start_time).toLocaleTimeString('zh-TW')}] ${s.content}`)
+      .map((s) => `[${formatTs(s.start_time)}] ${s.content}`)
       .join('\n');
 
     const todayContext = todaySources
-      .map((s) => `[${new Date(s.start_time).toLocaleTimeString('zh-TW')}] ${s.content}`)
+      .map((s) => `[${formatTs(s.start_time)}] ${s.content}`)
       .join('\n');
 
     const model = this.gemini.getGenerativeModel({

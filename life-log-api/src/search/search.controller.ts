@@ -1,4 +1,4 @@
-import { Controller, Post, Body } from '@nestjs/common';
+import { Controller, Post, Body, BadRequestException } from '@nestjs/common';
 import { SearchService } from './search.service';
 
 @Controller('search')
@@ -15,6 +15,8 @@ export class SearchController {
     @Body('question') question: string,
     @Body('track_id') trackId: string,
   ) {
-    return this.searchService.ask(question, trackId);
+    if (!question?.trim()) throw new BadRequestException('question is required');
+    if (!trackId?.trim()) throw new BadRequestException('track_id is required');
+    return this.searchService.ask(question.trim(), trackId.trim());
   }
 }
