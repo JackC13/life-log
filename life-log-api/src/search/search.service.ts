@@ -48,28 +48,53 @@ export class SearchService {
     );
 
     if (error) throw new Error(`Vector search failed: ${error.message}`);
-    const sources: SearchResult[] = matches ?? [];
+    const vectorSources: SearchResult[] = matches ?? [];
     this.logger.log(
-      `Vector search returned ${sources.length} matches for: "${question}"`,
+      `Vector search returned ${vectorSources.length} matches for: "${question}"`,
     );
 
-    // 3. 組成 RAG context，送給 Gemini
-    const context = sources
-      .map(
-        (s) =>
-          `[${new Date(s.start_time).toLocaleTimeString('zh-TW')}] ${s.content}`,
-      )
+    // 3. 同時撈今天的所有錄音（向量搜尋可能漏掉時間性問題如「今天有沒有錄音」）
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const { data: todayEvents } = await this.supabase.db
+      .from('events')
+      .select('id, content, start_time, audio_url')
+      .eq('track_id', resolvedTrackId)
+      .gte('start_time', todayStart.getTime())
+      .order('start_time', { ascending: true })
+      .limit(30);
+
+    // 合併：向量結果優先，今天的事件補充
+    const todaySources = (todayEvents ?? []) as SearchResult[];
+    const allIds = new Set(vectorSources.map((s) => s.id));
+    const combined = [
+      ...vectorSources,
+      ...todaySources.filter((s) => !allIds.has(s.id)),
+    ];
+    const sources = combined;
+
+    // 4. 組成 RAG context，送給 Gemini
+    const vectorContext = vectorSources
+      .map((s) => `[${new Date(s.start_time).toLocaleTimeString('zh-TW')}] ${s.content}`)
+      .join('\n');
+
+    const todayContext = todaySources
+      .map((s) => `[${new Date(s.start_time).toLocaleTimeString('zh-TW')}] ${s.content}`)
       .join('\n');
 
     const model = this.gemini.getGenerativeModel({
       model: this.config.get('GEMINI_MODEL', 'gemini-2.5-flash'),
     });
-    const prompt = `你是使用者的個人記憶助理。以下是使用者今天說過的話（摘錄）：
+    const prompt = `你是使用者的個人記憶助理。
 
-${context || '（今天尚無錄音記錄）'}
+【今天所有的錄音記錄】（共 ${todaySources.length} 筆）：
+${todayContext || '（今天尚無錄音記錄）'}
+
+【與問題最相關的片段】：
+${vectorContext || '（無相關片段）'}
 
 根據上述內容，請用繁體中文回答：「${question}」
-如果內容中找不到答案，請明確說明找不到相關記錄。`;
+如果找不到相關記錄，請明確說明。`;
 
     const result = await model.generateContent(prompt);
     const answer = result.response.text();
