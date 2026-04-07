@@ -37,7 +37,12 @@ export class AudioController {
     @Body('language') language?: string,
   ) {
     try {
-      return await this.audioService.processChunk(file, trackId, Number(startTime), language);
+      return await this.audioService.processChunk(
+        file,
+        trackId,
+        Number(startTime),
+        language,
+      );
     } catch (err) {
       return { error: true, message: err.message, stack: err.stack };
     }

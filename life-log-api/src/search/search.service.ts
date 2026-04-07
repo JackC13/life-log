@@ -17,8 +17,12 @@ export class SearchService {
     private supabase: SupabaseService,
     private events: EventsService,
   ) {
-    this.openai = new OpenAI({ apiKey: this.config.getOrThrow('OPENAI_API_KEY') });
-    this.gemini = new GoogleGenerativeAI(this.config.getOrThrow('GEMINI_API_KEY'));
+    this.openai = new OpenAI({
+      apiKey: this.config.getOrThrow('OPENAI_API_KEY'),
+    });
+    this.gemini = new GoogleGenerativeAI(
+      this.config.getOrThrow('GEMINI_API_KEY'),
+    );
   }
 
   async ask(question: string, trackId: string) {
@@ -33,20 +37,28 @@ export class SearchService {
     const queryEmbedding = embeddingRes.data[0].embedding;
 
     // 2. 向量相似度搜尋（需在 Supabase 建立 match_events RPC function）
-    const { data: matches, error } = await this.supabase.db.rpc('match_events', {
-      query_embedding: queryEmbedding,
-      match_threshold: 0.3,
-      match_count: 8,
-      filter_track_id: resolvedTrackId,
-    });
+    const { data: matches, error } = await this.supabase.db.rpc(
+      'match_events',
+      {
+        query_embedding: queryEmbedding,
+        match_threshold: 0.3,
+        match_count: 8,
+        filter_track_id: resolvedTrackId,
+      },
+    );
 
     if (error) throw new Error(`Vector search failed: ${error.message}`);
     const sources: SearchResult[] = matches ?? [];
-    this.logger.log(`Vector search returned ${sources.length} matches for: "${question}"`);
+    this.logger.log(
+      `Vector search returned ${sources.length} matches for: "${question}"`,
+    );
 
     // 3. 組成 RAG context，送給 Gemini
     const context = sources
-      .map((s) => `[${new Date(s.start_time).toLocaleTimeString('zh-TW')}] ${s.content}`)
+      .map(
+        (s) =>
+          `[${new Date(s.start_time).toLocaleTimeString('zh-TW')}] ${s.content}`,
+      )
       .join('\n');
 
     const model = this.gemini.getGenerativeModel({

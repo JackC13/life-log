@@ -1,4 +1,4 @@
 export const environment = {
   production: true,
-  apiUrl: 'https://your-api.railway.app', // 部署後換成真實 URL
+  apiUrl: 'https://life-log-production-3455.up.railway.app',
 };
