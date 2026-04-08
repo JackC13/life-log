@@ -4,6 +4,7 @@
   background: #0a0a0a;
   color: #e0e0e0;
   font-family: 'Courier New', monospace;
+  overflow: hidden;
 }
 
 .search-page {
@@ -41,7 +42,7 @@
     border-radius: 8px;
     padding: 12px 16px;
     color: #e0e0e0;
-    font-size: 15px;
+    font-size: 16px; // iOS 需要 >= 16px 才不會自動縮放
     font-family: inherit;
     outline: none;
 
@@ -98,6 +99,9 @@
   flex: 1;
   overflow-y: auto;
   padding: 20px;
+  scrollbar-width: none;
+  &::-webkit-scrollbar { display: none; }
+  -webkit-overflow-scrolling: touch;
 
   .answer {
     background: #111;

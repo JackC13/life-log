@@ -4,6 +4,7 @@
   background: #0a0a0a;
   color: #e0e0e0;
   font-family: 'Courier New', monospace;
+  overflow: hidden;
 }
 
 .log-page {
@@ -68,7 +69,7 @@
     border-radius: 8px;
     padding: 10px 14px;
     color: #e0e0e0;
-    font-size: 14px;
+    font-size: 16px; // iOS 需要 >= 16px 才不會自動縮放
     font-family: inherit;
     outline: none;
 
@@ -145,6 +146,9 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  &::-webkit-scrollbar { display: none; }
 }
 
 .event-card {
