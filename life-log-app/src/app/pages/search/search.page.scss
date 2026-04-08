@@ -49,6 +49,23 @@
     &::placeholder { color: #555; }
   }
 
+  .mic-btn {
+    padding: 12px 14px;
+    background: #333;
+    border: 1px solid #555;
+    border-radius: 8px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background 0.2s;
+
+    &.listening {
+      background: #4a1a1a;
+      border-color: #e06c75;
+      animation: pulse 1s ease-in-out infinite;
+    }
+    &:hover:not(.listening) { background: #444; }
+  }
+
   .ask-btn {
     padding: 12px 24px;
     background: #7cb8ff;
@@ -62,6 +79,19 @@
     &:disabled { opacity: 0.5; cursor: not-allowed; }
     &:hover:not(:disabled) { background: #9bcfff; }
   }
+}
+
+.listening-hint {
+  text-align: center;
+  padding: 8px;
+  font-size: 13px;
+  color: #e06c75;
+  letter-spacing: 1px;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 
 .result {
@@ -95,5 +125,7 @@
 
     .src-time { color: #7cb8ff; white-space: nowrap; }
     .src-content { color: #aaa; }
+
+    &.text-note .src-time { color: #98c379; }
   }
 }

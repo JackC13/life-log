@@ -3,6 +3,7 @@ import { SupabaseService } from '../common/supabase.service';
 import { WhisperService } from './whisper.service';
 import { EventsService } from '../events/events.service';
 import { EmbeddingService } from '../common/embedding.service';
+import { TaggingService } from '../common/tagging.service';
 
 @Injectable()
 export class AudioService {
@@ -13,6 +14,7 @@ export class AudioService {
     private whisper: WhisperService,
     private events: EventsService,
     private embedding: EmbeddingService,
+    private tagging: TaggingService,
   ) {}
 
   async processChunk(
@@ -34,18 +36,22 @@ export class AudioService {
 
     if (!segments.length) return { success: true, segmentCount: 0 };
 
-    // 3. 批次產生 Embedding（文字 → 向量）
+    // 3. 批次產生 Embedding（文字 → 向量）與 Tags（同時進行，節省時間）
     const texts = segments.map((s) => s.content);
-    const embeddings = await this.embedding.embedBatch(texts);
-    this.logger.log(`Embedded ${embeddings.length} segments`);
+    const [embeddings, tags] = await Promise.all([
+      this.embedding.embedBatch(texts),
+      this.tagging.tagBatch(texts),
+    ]);
+    this.logger.log(`Embedded ${embeddings.length} segments, tagged ${tags.length} segments`);
 
-    // 4. 將 segments + embedding 寫入 events 資料表
+    // 4. 將 segments + embedding + tags 寫入 events 資料表
     await this.events.insertMany(
       segments.map((s, i) => ({
         ...s,
         track_id: resolvedTrackId,
         audio_url: audioUrl,
         embedding: embeddings[i],
+        tags: tags[i] ?? [],
       })),
     );
 

@@ -5,7 +5,7 @@ import { environment } from '../../environments/environment';
 
 export interface SearchResponse {
   answer: string;
-  sources: { id: string; content: string; start_time: number; similarity: number }[];
+  sources: { id: string; content: string; start_time: number; audio_url?: string; similarity?: number }[];
 }
 
 @Injectable({ providedIn: 'root' })

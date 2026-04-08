@@ -1,5 +1,6 @@
 import { Component, OnInit, OnDestroy, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { AudioCaptureService } from '../../services/audio-capture.service';
@@ -14,13 +15,21 @@ interface PlayerState {
 @Component({
   selector: 'app-log-page',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink],
   template: `
     <div class="log-page">
       <!-- 頂部狀態列 -->
       <header class="header">
         <h1>🎙️ Life Log</h1>
-        <a routerLink="/search" class="search-btn">🔍 問 AI</a>
+        <div class="header-actions">
+          <button
+            class="note-toggle-btn"
+            [class.active]="showNoteInput()"
+            (click)="toggleNoteInput()"
+            title="快速記事"
+          >✏️</button>
+          <a routerLink="/search" class="search-btn">🔍 問 AI</a>
+        </div>
       </header>
 
       <!-- 錄音控制 -->
@@ -58,6 +67,27 @@ interface PlayerState {
         </div>
       </div>
 
+      <!-- 文字記事輸入（點 header ✏️ 展開） -->
+      @if (showNoteInput()) {
+        <div class="text-note">
+          <div class="text-note-row">
+            <input
+              [(ngModel)]="noteText"
+              (keyup.enter)="submitNote()"
+              placeholder="輸入記事內容..."
+              class="note-input"
+              [disabled]="noteSubmitting()"
+            />
+            <button
+              class="note-btn"
+              (click)="submitNote()"
+              [disabled]="!noteText.trim() || noteSubmitting()"
+            >{{ noteSubmitting() ? '...' : '記下' }}</button>
+            <button class="note-cancel-btn" (click)="toggleNoteInput()">✕</button>
+          </div>
+        </div>
+      }
+
       <!-- 對話事件列表（RPG Backlog 風格） -->
       <div class="events-list">
         <!-- 翻譯中佔位卡片 -->
@@ -74,19 +104,25 @@ interface PlayerState {
           <div
             class="event-card"
             [class.active]="player()?.event?.id === event.id"
-            (click)="playEvent(event)"
+            [class.text-only]="!event.audio_url"
+            (click)="event.audio_url ? playEvent(event) : null"
+            [style.cursor]="event.audio_url ? 'pointer' : 'default'"
           >
             <span class="timestamp">
               {{ formatTime(event.start_time) }}
-              <span class="play-icon">{{
-                player()?.event?.id === event.id && player()?.isPlaying ? '⏸' : '▶'
-              }}</span>
+              @if (event.audio_url) {
+                <span class="play-icon">{{
+                  player()?.event?.id === event.id && player()?.isPlaying ? '⏸' : '▶'
+                }}</span>
+              } @else {
+                <span class="note-icon">✏️</span>
+              }
             </span>
             <p class="content">{{ event.content }}</p>
             @if (event.tags.length) {
               <div class="tags">
                 @for (tag of event.tags; track tag) {
-                  <span class="tag">#{{ tag }}</span>
+                  <span class="tag" [attr.data-tag]="tag">#{{ tag }}</span>
                 }
               </div>
             }
@@ -122,6 +158,9 @@ export class LogPage implements OnInit, OnDestroy {
   events = signal<LifeLogEvent[]>([]);
   player = signal<PlayerState | null>(null);
   transcribeStartTime = 0;
+  noteText = '';
+  noteSubmitting = signal(false);
+  showNoteInput = signal(false);
   private pollInterval?: ReturnType<typeof setInterval>;
   private audioEl: HTMLAudioElement | null = null;
 
@@ -155,6 +194,29 @@ export class LogPage implements OnInit, OnDestroy {
     } else {
       this.audio.start().catch(console.error);
     }
+  }
+
+  toggleNoteInput() {
+    this.showNoteInput.update(v => !v);
+    if (!this.showNoteInput()) this.noteText = '';
+  }
+
+  submitNote() {
+    const text = this.noteText.trim();
+    if (!text || this.noteSubmitting()) return;
+    this.noteSubmitting.set(true);
+    this.eventsService.createText(text).subscribe({
+      next: () => {
+        this.noteText = '';
+        this.noteSubmitting.set(false);
+        this.showNoteInput.set(false);
+        this.loadEvents();
+      },
+      error: (err) => {
+        console.error('Failed to save note:', err);
+        this.noteSubmitting.set(false);
+      },
+    });
   }
 
   loadEvents() {

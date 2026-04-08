@@ -23,4 +23,11 @@ export class EventsService {
       params: { track_id: trackId, limit: String(limit), offset: String(offset) },
     });
   }
+
+  createText(content: string, trackId = 'personal-life'): Observable<{ success: boolean }> {
+    return this.http.post<{ success: boolean }>(`${environment.apiUrl}/events/text`, {
+      content,
+      track_id: trackId,
+    });
+  }
 }
