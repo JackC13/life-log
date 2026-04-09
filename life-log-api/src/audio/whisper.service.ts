@@ -51,14 +51,26 @@ export class WhisperService {
   private isValidContent(text: string): boolean {
     if (!text || text.length < 2) return false;
 
-    // 已知的 Whisper 幻覺片語
+    // 已知的 Whisper 幻覺片語（空白或雜音時常見輸出）
     const hallucinations = [
       '日常生活對話', 'daily life', 'shopping list',
       'thank you', 'thanks for watching', 'please subscribe',
       '謝謝', '謝謝觀看', '字幕', 'subtitle',
+      // 短句幻覺：完全符合才過濾，避免誤殺正常內容
     ];
 
-    const lower = text.toLowerCase();
+    const exact = [
+      'you', 'you.', 'you!',
+      'bye', 'bye.', 'okay', 'ok', 'ok.',
+      '...', '。', '.', ' ',
+    ];
+
+    const lower = text.trim().toLowerCase();
+
+    // 完全符合幻覺短句
+    if (exact.includes(lower)) return false;
+
+    // 包含幻覺片語
     return !hallucinations.some((h) => lower.includes(h.toLowerCase()));
   }
 }

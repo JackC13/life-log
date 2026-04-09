@@ -11,10 +11,16 @@ export class AudioCaptureService {
   readonly recordingSeconds = signal(0);
   readonly gain = signal<1 | 2 | 3 | 5>(3);
   readonly language = signal<'zh' | 'en' | 'auto'>('auto');
+  readonly autoStop = signal(false);                    // 自動超時停止開關
+  readonly autoStopMinutes = signal<15 | 30 | 60>(30); // 超時分鐘數
+  readonly continuousMode = signal(false);              // 持續錄音（超時後自動重啟）
   readonly statusText = computed(() => {
     if (this.isUploading()) return '⏳ 辨識中...';
     if (this.isStopping()) return '🔶 收尾中...';
-    if (this.isRecording()) return '🔴 錄音中';
+    if (this.isRecording()) {
+      const cont = this.continuousMode() ? ' 🔁' : '';
+      return `🔴 錄音中${cont}`;
+    }
     return '⚪ 未錄音';
   });
   readonly recordingTime = computed(() => {
@@ -26,6 +32,7 @@ export class AudioCaptureService {
 
   private mediaRecorder?: MediaRecorder;
   private stream?: MediaStream;
+  private boostedStream?: MediaStream;    // GainNode 處理後的串流，保留供輪替用
   private collectedChunks: Blob[] = [];   // 當前 chunk 累積
   private pendingUploads = 0;             // 並發上傳計數，避免 race condition
   private trackId = 'personal-life';
@@ -33,6 +40,9 @@ export class AudioCaptureService {
   private chunkStartTime = 0;             // 當前 chunk 的起始時間
   private timerInterval?: ReturnType<typeof setInterval>;
   private chunkInterval?: ReturnType<typeof setInterval>;
+  private autoStopTimeout?: ReturnType<typeof setTimeout>;
+  private autoStopped = false;            // 標記是否由超時自動停止（非手動）
+  private isRotating = false;             // 輪替中（非手動停止）
   private mimeType = '';                  // 動態偵測瀏覽器支援的格式
 
   /** 偵測當前平台支援的錄音格式，mp4 優先確保 iOS/WKWebView 相容 */
@@ -72,51 +82,87 @@ export class AudioCaptureService {
     const boostedStream = destination.stream;
 
     this.mimeType = this.getSupportedMimeType();
+    this.boostedStream = boostedStream;
+    this.chunkStartTime = this.sessionStartTime;
+    this.startNewRecorder();
+
+    // 每 30 秒輪替一次 MediaRecorder，確保每段 chunk 都有完整的音訊 header
+    this.chunkInterval = setInterval(() => this.rotateRecorder(), this.CHUNK_INTERVAL);
+
+    // 自動超時停止
+    this.autoStopped = false;
+    if (this.autoStop()) {
+      const ms = this.autoStopMinutes() * 60 * 1000;
+      this.autoStopTimeout = setTimeout(() => {
+        this.autoStopped = true;
+        this.stop();
+      }, ms);
+    }
+  }
+
+  /** 建立新的 MediaRecorder（輪替或初次啟動用） */
+  private startNewRecorder(): void {
+    this.collectedChunks = [];
+    this.chunkStartTime = Date.now();
+
     this.mediaRecorder = new MediaRecorder(
-      boostedStream,
+      this.boostedStream!,
       this.mimeType ? { mimeType: this.mimeType } : {},
     );
 
-    this.chunkStartTime = this.sessionStartTime;
-
-    // 持續收集所有音訊片段
     this.mediaRecorder.ondataavailable = (e) => {
       if (e.data.size > 0) this.collectedChunks.push(e.data);
     };
 
-    // 停止時把剩餘片段上傳
     this.mediaRecorder.onstop = () => {
       this.flushChunks();
+      // 輪替模式：flush 後立刻啟動新的 Recorder
+      if (this.isRotating && this.isRecording()) {
+        this.isRotating = false;
+        this.startNewRecorder();
+      }
     };
 
     this.mediaRecorder.start(1_000);
+  }
 
-    // 每 30 秒自動打包上傳，邊錄邊出現文字
-    this.chunkInterval = setInterval(() => this.flushChunks(), this.CHUNK_INTERVAL);
+  /** 停止當前 Recorder 並在 onstop 後自動啟動新的（輪替） */
+  private rotateRecorder(): void {
+    if (!this.mediaRecorder || !this.isRecording()) return;
+    this.isRotating = true;
+    this.mediaRecorder.stop();
   }
 
   stop(): void {
     if (!this.isRecording()) return;
     clearInterval(this.timerInterval);
     clearInterval(this.chunkInterval);
+    clearTimeout(this.autoStopTimeout);
+    this.isRotating = false;  // 確保手動停止不會觸發輪替重啟
     this.isRecording.set(false);
     this.isStopping.set(true);
+
+    const wasAutoStopped = this.autoStopped;
+    this.autoStopped = false;
 
     // 延遲 1.5 秒讓最後的話也被收進來
     setTimeout(() => {
       this.isStopping.set(false);
       this.mediaRecorder?.stop();
       this.stream?.getTracks().forEach((t) => t.stop());
+
+      // 持續錄音：若由超時觸發且 continuousMode 開啟，自動重啟
+      if (wasAutoStopped && this.continuousMode()) {
+        setTimeout(() => this.start(this.trackId), 1000);
+      }
     }, 1500);
   }
 
-  /** 打包現有 chunks 上傳，並重置 buffer 準備下一段 */
+  /** 打包現有 chunks 上傳 */
   private flushChunks(): void {
     if (this.collectedChunks.length === 0) return;
     const chunks = [...this.collectedChunks];
     const startTime = this.chunkStartTime;
-    this.collectedChunks = [];
-    this.chunkStartTime = Date.now();
 
     const durationSec = (Date.now() - startTime) / 1000;
     if (durationSec < 3) return;

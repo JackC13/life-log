@@ -53,6 +53,36 @@
   }
 }
 
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-bottom: 1px solid #1a1a1a;
+  background: #0d0d0d;
+
+  .filter-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: #ccc;
+    font-size: 16px; // iOS 防縮放
+    font-family: inherit;
+    outline: none;
+    &::placeholder { color: #444; }
+  }
+
+  .filter-clear {
+    background: transparent;
+    border: none;
+    color: #555;
+    font-size: 14px;
+    cursor: pointer;
+    padding: 4px 6px;
+    &:hover { color: #aaa; }
+  }
+}
+
 .text-note {
   padding: 10px 16px;
   border-bottom: 1px solid #222;
@@ -163,6 +193,12 @@
   &:hover { background: #161616; }
   &.active { border-left-color: #ffcc44; background: #1a1800; }
 
+  &.highlighted {
+    border-left-color: #c678dd;
+    background: #1a0a2a;
+    animation: highlight-fade 3s ease-out forwards;
+  }
+
   .timestamp {
     font-size: 11px;
     color: #666;
@@ -231,6 +267,30 @@
   justify-content: center;
 
   &.disabled { opacity: 0.4; pointer-events: none; }
+
+  &.extra-row {
+    padding-top: 4px;
+    border-top: 1px solid #1e1e1e;
+    margin-top: 4px;
+  }
+}
+
+.switch-btn {
+  padding: 4px 14px;
+  border-radius: 16px;
+  border: 1px solid #444;
+  background: #1a1a1a;
+  color: #666;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &.on {
+    background: #1a3a1a;
+    border-color: #98c379;
+    color: #98c379;
+    font-weight: bold;
+  }
 }
 
 .toggle-group {
@@ -297,6 +357,22 @@
   line-height: 2;
 }
 
+.load-more-btn {
+  width: 100%;
+  padding: 12px;
+  background: transparent;
+  border: 1px solid #333;
+  border-radius: 8px;
+  color: #666;
+  font-size: 13px;
+  cursor: pointer;
+  margin-top: 4px;
+  transition: all 0.2s;
+
+  &:hover:not(:disabled) { border-color: #555; color: #aaa; }
+  &:disabled { opacity: 0.5; cursor: not-allowed; }
+}
+
 .mini-player {
   position: sticky;
   bottom: 0;
@@ -344,6 +420,11 @@
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
+}
+
+@keyframes highlight-fade {
+  0%   { background: #2a1040; border-left-color: #c678dd; }
+  100% { background: #111;    border-left-color: #2a2a2a; }
 }
 
 @keyframes dots {

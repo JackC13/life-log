@@ -1,7 +1,7 @@
-import { Component, signal, inject } from '@angular/core';
+import { Component, signal, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { RouterLink, Router } from '@angular/router';
 import { SearchService, SearchResponse } from '../../services/search.service';
 
 @Component({
@@ -43,13 +43,18 @@ import { SearchService, SearchResponse } from '../../services/search.service';
           <div class="answer">{{ result()!.answer }}</div>
           @if (result()!.sources.length) {
             <div class="sources">
-              <div class="sources-title">📎 來源片段</div>
+              <div class="sources-title">📎 來源片段　<span class="sources-hint">點擊可跳到 Log</span></div>
               @for (src of result()!.sources; track src.id) {
-                <div class="source-card" [class.text-note]="!src.audio_url">
+                <div
+                  class="source-card"
+                  [class.text-note]="!src.audio_url"
+                  (click)="goToLog(src.id)"
+                >
                   <span class="src-time">
                     {{ src.audio_url ? '🎙️' : '✏️' }} {{ formatTime(src.start_time) }}
                   </span>
                   <span class="src-content">{{ src.content }}</span>
+                  <span class="src-arrow">›</span>
                 </div>
               }
             </div>
@@ -60,15 +65,27 @@ import { SearchService, SearchResponse } from '../../services/search.service';
   `,
   styleUrl: './search.page.scss',
 })
-export class SearchPage {
+export class SearchPage implements OnInit {
   private searchService = inject(SearchService);
+  private router = inject(Router);
 
   question = '';
   loading = signal(false);
   listening = signal(false);
-  result = signal<SearchResponse | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private recognition: any = null;
+
+  // 從 Service 取快取結果（跨頁面保留）
+  result = this.searchService.cachedResult;
+
+  ngOnInit() {
+    // 還原上次問的問題
+    this.question = this.searchService.cachedQuestion();
+  }
+
+  goToLog(eventId: string) {
+    this.router.navigate(['/log'], { queryParams: { highlight: eventId } });
+  }
 
   toggleVoiceInput() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -91,11 +108,11 @@ export class SearchPage {
     this.recognition.onstart = () => this.listening.set(true);
     this.recognition.onend = () => this.listening.set(false);
     this.recognition.onerror = () => this.listening.set(false);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     this.recognition.onresult = (event: any) => {
       const transcript = event.results[0][0].transcript;
       this.question = transcript;
       this.listening.set(false);
-      // 說完後自動送出
       setTimeout(() => this.ask(), 300);
     };
 
@@ -105,13 +122,9 @@ export class SearchPage {
   ask() {
     if (!this.question.trim() || this.loading()) return;
     this.loading.set(true);
-    this.result.set(null);
 
     this.searchService.ask(this.question).subscribe({
-      next: (res) => {
-        this.result.set(res);
-        this.loading.set(false);
-      },
+      next: () => this.loading.set(false),
       error: (err) => {
         console.error(err);
         this.loading.set(false);

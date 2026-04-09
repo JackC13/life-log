@@ -1,7 +1,7 @@
-import { Component, OnInit, OnDestroy, signal, inject } from '@angular/core';
+import { Component, OnInit, OnDestroy, signal, inject, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { RouterLink, ActivatedRoute } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { AudioCaptureService } from '../../services/audio-capture.service';
 import { EventsService, LifeLogEvent } from '../../services/events.service';
@@ -65,6 +65,46 @@ interface PlayerState {
             </div>
           </div>
         </div>
+
+        <!-- 自動超時停止 & 持續錄音 -->
+        <div class="controls-row extra-row" [class.disabled]="audio.isRecording()">
+          <div class="toggle-group">
+            <span class="toggle-label">自動停止</span>
+            <button
+              class="switch-btn"
+              [class.on]="audio.autoStop()"
+              (click)="audio.autoStop.set(!audio.autoStop())"
+            >{{ audio.autoStop() ? '開' : '關' }}</button>
+            @if (audio.autoStop()) {
+              <div class="toggle">
+                <button [class.active]="audio.autoStopMinutes() === 15"  (click)="audio.autoStopMinutes.set(15)">15m</button>
+                <button [class.active]="audio.autoStopMinutes() === 30"  (click)="audio.autoStopMinutes.set(30)">30m</button>
+                <button [class.active]="audio.autoStopMinutes() === 60"  (click)="audio.autoStopMinutes.set(60)">60m</button>
+              </div>
+            }
+          </div>
+          <div class="toggle-group">
+            <span class="toggle-label">持續錄音</span>
+            <button
+              class="switch-btn"
+              [class.on]="audio.continuousMode()"
+              (click)="audio.continuousMode.set(!audio.continuousMode())"
+            >{{ audio.continuousMode() ? '開' : '關' }}</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 關鍵字過濾列 -->
+      <div class="filter-bar">
+        <input
+          [(ngModel)]="filterTextValue"
+          (ngModelChange)="filterText.set($event)"
+          placeholder="🔎 搜尋關鍵字或標籤..."
+          class="filter-input"
+        />
+        @if (filterText()) {
+          <button class="filter-clear" (click)="filterText.set(''); filterTextValue = ''">✕</button>
+        }
       </div>
 
       <!-- 文字記事輸入（點 header ✏️ 展開） -->
@@ -100,11 +140,13 @@ interface PlayerState {
           </div>
         }
 
-        @for (event of events(); track event.id) {
+        @for (event of filteredEvents(); track event.id) {
           <div
             class="event-card"
+            [id]="'event-' + event.id"
             [class.active]="player()?.event?.id === event.id"
             [class.text-only]="!event.audio_url"
+            [class.highlighted]="highlightId() === event.id"
             (click)="event.audio_url ? playEvent(event) : null"
             [style.cursor]="event.audio_url ? 'pointer' : 'default'"
           >
@@ -129,8 +171,21 @@ interface PlayerState {
           </div>
         } @empty {
           @if (!audio.isUploading()) {
-            <div class="empty">開始錄音，對話記錄會自動出現在這裡</div>
+            <div class="empty">
+              @if (filterText()) {
+                找不到「{{ filterText() }}」相關記錄
+              } @else {
+                開始錄音，對話記錄會自動出現在這裡
+              }
+            </div>
           }
+        }
+
+        <!-- 載入更多 -->
+        @if (hasMore()) {
+          <button class="load-more-btn" (click)="loadMore()" [disabled]="loadingMore()">
+            {{ loadingMore() ? '載入中...' : '載入更多' }}
+          </button>
         }
       </div>
 
@@ -154,19 +209,39 @@ export class LogPage implements OnInit, OnDestroy {
   audio = inject(AudioCaptureService);
   private eventsService = inject(EventsService);
   private http = inject(HttpClient);
+  private route = inject(ActivatedRoute);
 
   events = signal<LifeLogEvent[]>([]);
+  filterText = signal('');
+  filteredEvents = computed(() => {
+    const q = this.filterText().trim().toLowerCase();
+    if (!q) return this.events();
+    return this.events().filter(e =>
+      e.content.toLowerCase().includes(q) ||
+      e.tags.some(t => t.includes(q))
+    );
+  });
   player = signal<PlayerState | null>(null);
+  highlightId = signal<string | null>(null);
   transcribeStartTime = 0;
   noteText = '';
+  filterTextValue = '';
   noteSubmitting = signal(false);
   showNoteInput = signal(false);
+  hasMore = signal(false);
+  loadingMore = signal(false);
+  private readonly PAGE_SIZE = 30;
+  private currentOffset = 0;
   private pollInterval?: ReturnType<typeof setInterval>;
   private audioEl: HTMLAudioElement | null = null;
 
   ngOnInit() {
+    const targetId = this.route.snapshot.queryParamMap.get('highlight');
+    if (targetId) {
+      this.highlightId.set(targetId);
+    }
+
     this.loadEvents();
-    // 每 5 秒自動重新載入事件列表
     this.pollInterval = setInterval(() => this.loadEvents(), 5_000);
   }
 
@@ -220,9 +295,45 @@ export class LogPage implements OnInit, OnDestroy {
   }
 
   loadEvents() {
-    this.eventsService.list().subscribe({
-      next: (data) => this.events.set(data),
+    this.currentOffset = 0;
+    this.eventsService.list('personal-life', this.PAGE_SIZE, 0).subscribe({
+      next: (data) => {
+        this.events.set(data);
+        this.hasMore.set(data.length === this.PAGE_SIZE);
+        this.currentOffset = data.length;
+
+        // 若有高亮目標，找到並滾動過去
+        const targetId = this.highlightId();
+        if (targetId) {
+          setTimeout(() => this.scrollToEvent(targetId), 150);
+        }
+      },
       error: (err) => console.error('Failed to load events:', err),
+    });
+  }
+
+  private scrollToEvent(eventId: string) {
+    const el = document.getElementById(`event-${eventId}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // 3 秒後移除高亮
+    setTimeout(() => this.highlightId.set(null), 3000);
+  }
+
+  loadMore() {
+    if (this.loadingMore()) return;
+    this.loadingMore.set(true);
+    this.eventsService.list('personal-life', this.PAGE_SIZE, this.currentOffset).subscribe({
+      next: (data) => {
+        this.events.update(existing => [...existing, ...data]);
+        this.hasMore.set(data.length === this.PAGE_SIZE);
+        this.currentOffset += data.length;
+        this.loadingMore.set(false);
+      },
+      error: (err) => {
+        console.error('Failed to load more events:', err);
+        this.loadingMore.set(false);
+      },
     });
   }
 

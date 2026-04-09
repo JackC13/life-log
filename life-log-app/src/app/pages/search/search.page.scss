@@ -120,15 +120,29 @@
     margin-bottom: 10px;
   }
 
+  .sources-hint {
+    font-size: 11px;
+    color: #444;
+    font-weight: normal;
+  }
+
   .source-card {
     display: flex;
     gap: 12px;
     padding: 10px;
     border-bottom: 1px solid #1a1a1a;
     font-size: 13px;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background 0.15s;
+    align-items: center;
 
-    .src-time { color: #7cb8ff; white-space: nowrap; }
-    .src-content { color: #aaa; }
+    &:hover { background: #141414; }
+    &:active { background: #1a1a2a; }
+
+    .src-time { color: #7cb8ff; white-space: nowrap; flex-shrink: 0; }
+    .src-content { color: #aaa; flex: 1; }
+    .src-arrow { color: #444; font-size: 18px; flex-shrink: 0; }
 
     &.text-note .src-time { color: #98c379; }
   }
