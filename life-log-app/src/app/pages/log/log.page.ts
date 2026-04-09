@@ -34,49 +34,59 @@ interface PlayerState {
 
       <!-- 錄音控制 -->
       <div class="recorder">
-        <div class="status">{{ audio.statusText() }}</div>
-        <button
-          class="record-btn"
-          [class.recording]="audio.isRecording()"
-          [disabled]="audio.isUploading() || audio.isStopping()"
-          (click)="toggleRecording()"
-        >
-          {{ audio.isRecording() ? '■ 停止' : '● 開始錄音' }}
-        </button>
-        @if (audio.isRecording()) {
-          <span class="timer">{{ audio.recordingTime() }}</span>
-        }
-        <div class="controls-row" [class.disabled]="audio.isRecording() || audio.isUploading()">
-          <div class="toggle-group">
-            <span class="toggle-label">語言</span>
-            <div class="toggle">
-              <button [class.active]="audio.language() === 'zh'" (click)="setLanguage('zh')">中文</button>
-              <button [class.active]="audio.language() === 'en'" (click)="setLanguage('en')">EN</button>
-              <button [class.active]="audio.language() === 'auto'" (click)="setLanguage('auto')">不區分</button>
-            </div>
-          </div>
-          <div class="toggle-group">
-            <span class="toggle-label">增益</span>
-            <div class="toggle">
-              <button [class.active]="audio.gain() === 1" (click)="setGain(1)">1x</button>
-              <button [class.active]="audio.gain() === 2" (click)="setGain(2)">2x</button>
-              <button [class.active]="audio.gain() === 3" (click)="setGain(3)">3x</button>
-              <button [class.active]="audio.gain() === 5" (click)="setGain(5)">5x</button>
-            </div>
+        <div class="recorder-main">
+          <div class="status">{{ audio.statusText() }}</div>
+          <div class="recorder-row">
+            <button
+              class="record-btn"
+              [class.recording]="audio.isRecording()"
+              [disabled]="audio.isUploading() || audio.isStopping()"
+              (click)="toggleRecording()"
+            >
+              {{ audio.isRecording() ? '■ 停止' : '● 開始錄音' }}
+            </button>
+            @if (audio.isRecording()) {
+              <span class="timer">{{ audio.recordingTime() }}</span>
+            }
+            <button
+              class="settings-btn"
+              [class.active]="showSettings()"
+              (click)="showSettings.set(!showSettings())"
+              title="設定"
+            >⚙️</button>
           </div>
         </div>
 
-        <!-- 自動停止（30分鐘），關閉則持續錄音 -->
-        <div class="controls-row extra-row" [class.disabled]="audio.isRecording()">
-          <div class="toggle-group">
-            <span class="toggle-label">自動停止</span>
-            <button
-              class="switch-btn"
-              [class.on]="audio.autoStop()"
-              (click)="audio.autoStop.set(!audio.autoStop())"
-            >{{ audio.autoStop() ? '開 (30m)' : '關' }}</button>
+        <!-- 可收折設定面板 -->
+        @if (showSettings()) {
+          <div class="settings-panel" [class.disabled]="audio.isRecording() || audio.isUploading()">
+            <div class="setting-row">
+              <span class="setting-label">語言</span>
+              <div class="toggle">
+                <button [class.active]="audio.language() === 'zh'" (click)="setLanguage('zh')">中文</button>
+                <button [class.active]="audio.language() === 'en'" (click)="setLanguage('en')">EN</button>
+                <button [class.active]="audio.language() === 'auto'" (click)="setLanguage('auto')">自動</button>
+              </div>
+            </div>
+            <div class="setting-row">
+              <span class="setting-label">增益</span>
+              <div class="toggle">
+                <button [class.active]="audio.gain() === 1" (click)="setGain(1)">1x</button>
+                <button [class.active]="audio.gain() === 2" (click)="setGain(2)">2x</button>
+                <button [class.active]="audio.gain() === 3" (click)="setGain(3)">3x</button>
+                <button [class.active]="audio.gain() === 5" (click)="setGain(5)">5x</button>
+              </div>
+            </div>
+            <div class="setting-row">
+              <span class="setting-label">自動停止</span>
+              <button
+                class="switch-btn"
+                [class.on]="audio.autoStop()"
+                (click)="audio.autoStop.set(!audio.autoStop())"
+              >{{ audio.autoStop() ? '30 分鐘' : '關閉' }}</button>
+            </div>
           </div>
-        </div>
+        }
       </div>
 
       <!-- 關鍵字過濾列 -->
@@ -218,6 +228,7 @@ export class LogPage implements OnInit, OnDestroy {
   showNoteInput = signal(false);
   hasMore = signal(false);
   loadingMore = signal(false);
+  showSettings = signal(false);
   private readonly PAGE_SIZE = 30;
   private currentOffset = 0;
   private pollInterval?: ReturnType<typeof setInterval>;
