@@ -53,23 +53,52 @@ export class SearchService {
       `Vector search returned ${vectorSources.length} matches for: "${question}"`,
     );
 
-    // 3. 撈最近 14 天的所有錄音作為時間軸背景
-    //    不做關鍵字偵測，讓 Gemini 自行根據日期判斷「今天」「昨天」「前天」等相對時間
+    // 3. 依問題內容判斷時間範圍，針對性撈資料（不設筆數上限）
+    //    - 有「今天/昨天/前天/這週」等時間詞 → 撈對應天數
+    //    - 無時間詞 → 不撈近期流水帳，只靠向量搜尋結果
     const now = new Date();
-    const recentStart = new Date(now);
-    recentStart.setDate(recentStart.getDate() - 14);
-    recentStart.setHours(0, 0, 0, 0);
 
-    const { data: recentEvents } = await this.supabase.db
-      .from('events')
-      .select('id, content, start_time, audio_url')
-      .eq('track_id', resolvedTrackId)
-      .gte('start_time', recentStart.getTime())
-      .order('start_time', { ascending: true })
-      .limit(60);
+    // 用 Asia/Taipei 計算今天 0:00（避免 Railway UTC +8 偏差）
+    const toTaipeiMidnight = (d: Date, offsetDays = 0): Date => {
+      const taipeiMs =
+        d.getTime() + 8 * 3600 * 1000 + offsetDays * 86400 * 1000;
+      const taipeiDate = new Date(taipeiMs);
+      taipeiDate.setUTCHours(0, 0, 0, 0);
+      return new Date(taipeiDate.getTime() - 8 * 3600 * 1000); // 轉回 UTC 存 ms
+    };
+
+    // 偵測問題裡的時間詞，決定要撈幾天
+    const dayRange = (() => {
+      if (/今天|今日|今晚|今早|今午|上午|下午|早上|晚上|剛才|剛剛/.test(question))
+        return { start: toTaipeiMidnight(now, 0), end: now };
+      if (/昨天|昨日|昨晚|昨早/.test(question))
+        return { start: toTaipeiMidnight(now, -1), end: toTaipeiMidnight(now, 0) };
+      if (/前天/.test(question))
+        return { start: toTaipeiMidnight(now, -2), end: toTaipeiMidnight(now, -1) };
+      if (/這週|本週|這周|本周/.test(question))
+        return { start: toTaipeiMidnight(now, -6), end: now };
+      if (/最近|近期/.test(question))
+        return { start: toTaipeiMidnight(now, -3), end: now };
+      return null; // 無時間詞，不撈流水帳
+    })();
+
+    let recentEvents: SearchResult[] = [];
+    if (dayRange) {
+      const { data } = await this.supabase.db
+        .from('events')
+        .select('id, content, start_time, audio_url')
+        .eq('track_id', resolvedTrackId)
+        .gte('start_time', dayRange.start.getTime())
+        .lte('start_time', dayRange.end.getTime())
+        .order('start_time', { ascending: true }); // 不加 limit，撈完整時段
+      recentEvents = (data ?? []) as SearchResult[];
+      this.logger.log(
+        `Time-range query: ${dayRange.start.toISOString()} ~ ${dayRange.end.toISOString()}, got ${recentEvents.length} events`,
+      );
+    }
 
     // 合併：向量結果優先，近期事件補充（去重）
-    const recentSources = (recentEvents ?? []) as SearchResult[];
+    const recentSources = recentEvents;
     const allIds = new Set(vectorSources.map((s) => s.id));
     const combined = [
       ...vectorSources,
@@ -103,10 +132,11 @@ export class SearchService {
     const model = this.gemini.getGenerativeModel({
       model: this.config.get('GEMINI_MODEL', 'gemini-2.5-flash'),
     });
+    const timeLabel = dayRange ? '對應時段的錄音記錄' : '（無時間篩選）';
     const prompt = `你是使用者的個人記憶助理。今天日期是 ${todayStr}。
 
-【最近 14 天的錄音記錄】（共 ${recentSources.length} 筆，依時間排序）：
-${recentContext || '（近期尚無錄音記錄）'}
+【${timeLabel}】（共 ${recentSources.length} 筆，依時間排序）：
+${recentContext || '（該時段無錄音記錄）'}
 
 【語意搜尋最相關的片段】：
 ${vectorContext || '（無相關片段）'}

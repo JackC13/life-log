@@ -66,7 +66,7 @@ interface PlayerState {
           </div>
         </div>
 
-        <!-- 自動超時停止 & 持續錄音 -->
+        <!-- 自動停止（30分鐘），關閉則持續錄音 -->
         <div class="controls-row extra-row" [class.disabled]="audio.isRecording()">
           <div class="toggle-group">
             <span class="toggle-label">自動停止</span>
@@ -74,22 +74,7 @@ interface PlayerState {
               class="switch-btn"
               [class.on]="audio.autoStop()"
               (click)="audio.autoStop.set(!audio.autoStop())"
-            >{{ audio.autoStop() ? '開' : '關' }}</button>
-            @if (audio.autoStop()) {
-              <div class="toggle">
-                <button [class.active]="audio.autoStopMinutes() === 15"  (click)="audio.autoStopMinutes.set(15)">15m</button>
-                <button [class.active]="audio.autoStopMinutes() === 30"  (click)="audio.autoStopMinutes.set(30)">30m</button>
-                <button [class.active]="audio.autoStopMinutes() === 60"  (click)="audio.autoStopMinutes.set(60)">60m</button>
-              </div>
-            }
-          </div>
-          <div class="toggle-group">
-            <span class="toggle-label">持續錄音</span>
-            <button
-              class="switch-btn"
-              [class.on]="audio.continuousMode()"
-              (click)="audio.continuousMode.set(!audio.continuousMode())"
-            >{{ audio.continuousMode() ? '開' : '關' }}</button>
+            >{{ audio.autoStop() ? '開 (30m)' : '關' }}</button>
           </div>
         </div>
       </div>
@@ -98,7 +83,7 @@ interface PlayerState {
       <div class="filter-bar">
         <input
           [(ngModel)]="filterTextValue"
-          (ngModelChange)="filterText.set($event)"
+          (ngModelChange)="onFilterChange($event)"
           placeholder="🔎 搜尋關鍵字或標籤..."
           class="filter-input"
         />
@@ -181,8 +166,8 @@ interface PlayerState {
           }
         }
 
-        <!-- 載入更多 -->
-        @if (hasMore()) {
+        <!-- 載入更多（搜尋時已全量載入，不顯示） -->
+        @if (hasMore() && !filterText()) {
           <button class="load-more-btn" (click)="loadMore()" [disabled]="loadingMore()">
             {{ loadingMore() ? '載入中...' : '載入更多' }}
           </button>
@@ -212,11 +197,14 @@ export class LogPage implements OnInit, OnDestroy {
   private route = inject(ActivatedRoute);
 
   events = signal<LifeLogEvent[]>([]);
+  allEvents = signal<LifeLogEvent[]>([]);   // 搜尋時用，撈全部資料
+  isLoadingAll = signal(false);
   filterText = signal('');
   filteredEvents = computed(() => {
     const q = this.filterText().trim().toLowerCase();
     if (!q) return this.events();
-    return this.events().filter(e =>
+    // 有搜尋字時，從 allEvents（全量）過濾
+    return this.allEvents().filter(e =>
       e.content.toLowerCase().includes(q) ||
       e.tags.some(t => t.includes(q))
     );
@@ -239,9 +227,11 @@ export class LogPage implements OnInit, OnDestroy {
     const targetId = this.route.snapshot.queryParamMap.get('highlight');
     if (targetId) {
       this.highlightId.set(targetId);
+      // 有高亮目標時撈全部資料，確保目標一定在 DOM 裡
+      this.loadAllEvents(() => setTimeout(() => this.scrollToEvent(targetId), 150));
+    } else {
+      this.loadEvents();
     }
-
-    this.loadEvents();
     this.pollInterval = setInterval(() => this.loadEvents(), 5_000);
   }
 
@@ -301,14 +291,47 @@ export class LogPage implements OnInit, OnDestroy {
         this.events.set(data);
         this.hasMore.set(data.length === this.PAGE_SIZE);
         this.currentOffset = data.length;
-
-        // 若有高亮目標，找到並滾動過去
-        const targetId = this.highlightId();
-        if (targetId) {
-          setTimeout(() => this.scrollToEvent(targetId), 150);
-        }
+        // 同步更新 allEvents（搜尋快取）
+        if (this.allEvents().length > 0) this.loadAll();
       },
       error: (err) => console.error('Failed to load events:', err),
+    });
+  }
+
+  /** 撈全部資料塞進 events（用於 highlight 跳轉），完成後執行 callback */
+  private loadAllEvents(callback?: () => void) {
+    this.eventsService.list('personal-life', 9999, 0).subscribe({
+      next: (data) => {
+        this.events.set(data);
+        this.hasMore.set(false);
+        this.currentOffset = data.length;
+        callback?.();
+      },
+      error: (err) => {
+        console.error('Failed to load all events:', err);
+        this.loadEvents(); // fallback 回分頁模式
+      },
+    });
+  }
+
+  onFilterChange(value: string) {
+    this.filterText.set(value);
+    // 第一次輸入搜尋字時撈全部資料
+    if (value.trim() && this.allEvents().length === 0) {
+      this.loadAll();
+    }
+  }
+
+  /** 搜尋用：撈全部資料進 allEvents */
+  loadAll() {
+    if (this.isLoadingAll()) return;
+    this.isLoadingAll.set(true);
+    this.eventsService.list('personal-life', 9999, 0).subscribe({
+      next: (data) => {
+        this.allEvents.set(data);
+        this.isLoadingAll.set(false);
+      },
+      error: () => this.isLoadingAll.set(false),
     });
   }
 
@@ -316,7 +339,6 @@ export class LogPage implements OnInit, OnDestroy {
     const el = document.getElementById(`event-${eventId}`);
     if (!el) return;
     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    // 3 秒後移除高亮
     setTimeout(() => this.highlightId.set(null), 3000);
   }
 

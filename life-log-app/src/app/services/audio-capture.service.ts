@@ -11,16 +11,11 @@ export class AudioCaptureService {
   readonly recordingSeconds = signal(0);
   readonly gain = signal<1 | 2 | 3 | 5>(3);
   readonly language = signal<'zh' | 'en' | 'auto'>('auto');
-  readonly autoStop = signal(false);                    // 自動超時停止開關
-  readonly autoStopMinutes = signal<15 | 30 | 60>(30); // 超時分鐘數
-  readonly continuousMode = signal(false);              // 持續錄音（超時後自動重啟）
+  readonly autoStop = signal(true);   // 自動停止（30 分鐘後停止），關閉則持續錄音
   readonly statusText = computed(() => {
     if (this.isUploading()) return '⏳ 辨識中...';
     if (this.isStopping()) return '🔶 收尾中...';
-    if (this.isRecording()) {
-      const cont = this.continuousMode() ? ' 🔁' : '';
-      return `🔴 錄音中${cont}`;
-    }
+    if (this.isRecording()) return '🔴 錄音中';
     return '⚪ 未錄音';
   });
   readonly recordingTime = computed(() => {
@@ -89,14 +84,13 @@ export class AudioCaptureService {
     // 每 30 秒輪替一次 MediaRecorder，確保每段 chunk 都有完整的音訊 header
     this.chunkInterval = setInterval(() => this.rotateRecorder(), this.CHUNK_INTERVAL);
 
-    // 自動超時停止
+    // 自動停止（30 分鐘）
     this.autoStopped = false;
     if (this.autoStop()) {
-      const ms = this.autoStopMinutes() * 60 * 1000;
       this.autoStopTimeout = setTimeout(() => {
         this.autoStopped = true;
         this.stop();
-      }, ms);
+      }, 30 * 60 * 1000);
     }
   }
 
@@ -151,8 +145,8 @@ export class AudioCaptureService {
       this.mediaRecorder?.stop();
       this.stream?.getTracks().forEach((t) => t.stop());
 
-      // 持續錄音：若由超時觸發且 continuousMode 開啟，自動重啟
-      if (wasAutoStopped && this.continuousMode()) {
+      // autoStop 關閉時（持續錄音模式）：超時後自動重啟
+      if (wasAutoStopped && !this.autoStop()) {
         setTimeout(() => this.start(this.trackId), 1000);
       }
     }, 1500);
